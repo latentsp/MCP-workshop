@@ -1,3 +1,4 @@
 fastmcp
 nest_asyncio 
 openai
+requests
