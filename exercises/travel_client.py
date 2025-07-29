@@ -18,6 +18,7 @@ async def get_mcp_tools() -> List[Dict[str, Any]]:
     Returns:
         A list of tools in OpenAI format.
     """
+    print("🔧 Connecting to MCP server to discover available tools...")
     server_params = StdioServerParameters(
         command="python",
         args=["travel_server.py"]
@@ -26,9 +27,10 @@ async def get_mcp_tools() -> List[Dict[str, Any]]:
     async with stdio_client(server_params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
+            print("✅ Connected to MCP server successfully")
             
             tools_result = await session.list_tools()
-            return [
+            tools = [
                 {
                     "type": "function",
                     "function": {
@@ -39,9 +41,12 @@ async def get_mcp_tools() -> List[Dict[str, Any]]:
                 }
                 for tool in tools_result.tools
             ]
+            print(f"📋 Discovered {len(tools)} tools: {', '.join([t['function']['name'] for t in tools])}")
+            return tools
 
 async def call_mcp_tool(tool_name: str, arguments: dict) -> str:
     """Call an MCP tool with the given arguments."""
+    print(f"🛠️  Executing tool: {tool_name} with arguments: {arguments}")
     server_params = StdioServerParameters(
         command="python",
         args=["travel_server.py"]
@@ -52,7 +57,9 @@ async def call_mcp_tool(tool_name: str, arguments: dict) -> str:
             await session.initialize()
             
             result = await session.call_tool(tool_name, arguments)
-            return result.content[0].text if result.content else "No result"
+            tool_result = result.content[0].text if result.content else "No result"
+            print(f"✅ Tool {tool_name} completed successfully")
+            return tool_result
 
 async def process_user_query(user_input: str, conversation_history: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
     """Process user input with OpenAI and handle any tool calls.
@@ -69,6 +76,7 @@ async def process_user_query(user_input: str, conversation_history: List[Dict[st
     tools = await get_mcp_tools()
     
     # Add user input to conversation history
+    print("📝 Adding user message to conversation history")
     conversation_history.append({
         "role": "user",
         "content": user_input
@@ -76,19 +84,24 @@ async def process_user_query(user_input: str, conversation_history: List[Dict[st
     
     # Use the full conversation history for context
     messages = conversation_history.copy()
+    print(f"💭 Using conversation history with {len(messages)} messages for context")
     
     # Make initial request to OpenAI
+    print("🤖 Sending request to OpenAI GPT-4...")
     response = client.chat.completions.create(
         model="gpt-4",
         messages=messages,
         tools=tools,
         tool_choice="auto"
     )
+    print("✅ Received response from OpenAI")
     
     message = response.choices[0].message
     
     # Handle tool calls if any
     if message.tool_calls:
+        print(f"🔧 OpenAI wants to call {len(message.tool_calls)} tool(s): {[tc.function.name for tc in message.tool_calls]}")
+        
         # Add assistant message to conversation
         messages.append({
             "role": "assistant",
@@ -107,9 +120,11 @@ async def process_user_query(user_input: str, conversation_history: List[Dict[st
         })
         
         # Execute each tool call
-        for tool_call in message.tool_calls:
+        for i, tool_call in enumerate(message.tool_calls, 1):
             function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
+            
+            print(f"🔄 Executing tool {i}/{len(message.tool_calls)}: {function_name}")
             
             # Call the MCP tool
             tool_result = await call_mcp_tool(function_name, function_args)
@@ -121,6 +136,7 @@ async def process_user_query(user_input: str, conversation_history: List[Dict[st
                 "content": tool_result
             })
         
+        print("🤖 Sending tool results back to OpenAI for final response...")
         # Get final response from OpenAI
         final_response = client.chat.completions.create(
             model="gpt-4",
@@ -130,6 +146,7 @@ async def process_user_query(user_input: str, conversation_history: List[Dict[st
         assistant_response = final_response.choices[0].message.content
         
         # Add final assistant response to conversation history
+        print("💾 Updating conversation history with tool calls and final response")
         conversation_history.extend(messages[len(conversation_history):])  # Add any new messages from tool calls
         conversation_history.append({
             "role": "assistant",
@@ -139,7 +156,9 @@ async def process_user_query(user_input: str, conversation_history: List[Dict[st
         return assistant_response, conversation_history
     
     # No tool calls, add assistant response directly to conversation history
+    print("💬 No tool calls needed, responding directly")
     assistant_response = message.content
+    print("💾 Updating conversation history with direct response")
     conversation_history.append({
         "role": "assistant",
         "content": assistant_response
@@ -153,7 +172,10 @@ async def main():
     print("Ask me anything about travel recommendations, booking trips, or transportation!")
     print("Type 'quit' to exit.\n")
     
+    print("🚀 Initializing travel assistant...")
+    
     # Initialize conversation history with system message
+    print("💭 Setting up conversation memory with system instructions")
     conversation_history = [
         {
             "role": "system",
@@ -168,26 +190,32 @@ async def main():
         }
     ]
     
+    print("✅ Assistant ready! You can start chatting now.\n" + "="*50)
+    
     while True:
         try:
             user_input = input("\nYou: ").strip()
             
             if user_input.lower() in ['quit', 'exit', 'bye']:
-                print("Goodbye! Have a great trip! ✈️")
+                print("👋 Goodbye! Have a great trip! ✈️")
                 break
                 
             if not user_input:
                 continue
                 
-            print("\nAssistant: ", end="")
+            print(f"\n🔄 Processing your request: '{user_input}'")
+            print("-" * 40)
             response, conversation_history = await process_user_query(user_input, conversation_history)
-            print(response)
+            print("-" * 40)
+            print(f"\nAssistant: {response}")
+            print("=" * 50)
             
         except KeyboardInterrupt:
-            print("\nGoodbye! Have a great trip! ✈️")
+            print("\n👋 Goodbye! Have a great trip! ✈️")
             break
         except Exception as e:
-            print(f"Error: {e}")
+            print(f"❌ Error occurred: {e}")
+            print("🔄 Please try again or type 'quit' to exit")
 
 if __name__ == "__main__":
     asyncio.run(main()) 
