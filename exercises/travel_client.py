@@ -175,7 +175,6 @@ async def main():
     print("🚀 Initializing travel assistant...")
     
     # Initialize conversation history with system message
-    print("💭 Setting up conversation memory with system instructions")
     conversation_history = [
         {
             "role": "system",
@@ -190,7 +189,7 @@ async def main():
         }
     ]
     
-    print("✅ Assistant ready! You can start chatting now.\n" + "="*50)
+    print("="*100)
     
     while True:
         try:
@@ -204,11 +203,11 @@ async def main():
                 continue
                 
             print(f"\n🔄 Processing your request: '{user_input}'")
-            print("-" * 40)
+            print("-" * 100)
             response, conversation_history = await process_user_query(user_input, conversation_history)
-            print("-" * 40)
+            print("-" * 100)
             print(f"\nAssistant: {response}")
-            print("=" * 50)
+            print("="*100)
             
         except KeyboardInterrupt:
             print("\n👋 Goodbye! Have a great trip! ✈️")
