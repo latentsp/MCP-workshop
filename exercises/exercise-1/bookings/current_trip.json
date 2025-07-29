@@ -1,0 +1,10 @@
+{
+  "booking_id": "CURRENT_TRIP",
+  "traveler_name": "Jon Yar",
+  "destination": "New York",
+  "start_date": "2022-11-20",
+  "end_date": "2022-11-23",
+  "budget": 500,
+  "booking_date": "2025-07-29T07:31:49.431219",
+  "status": "confirmed"
+}

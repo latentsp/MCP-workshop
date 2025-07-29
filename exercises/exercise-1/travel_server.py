@@ -69,7 +69,7 @@ def book_trip(traveler_name: str, destination: str, start_date: str, end_date: s
         Booking confirmation details including booking ID
     """
     booking_data = {
-        "booking_id": f"TRIP_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        "booking_id": "CURRENT_TRIP",
         "traveler_name": traveler_name,
         "destination": destination,
         "start_date": start_date,
@@ -83,12 +83,12 @@ def book_trip(traveler_name: str, destination: str, start_date: str, end_date: s
     bookings_dir = os.path.join(os.path.dirname(__file__), "bookings")
     os.makedirs(bookings_dir, exist_ok=True)
     
-    # Save booking to file
-    filename = os.path.join(bookings_dir, f"{booking_data['booking_id']}.json")
+    # Save booking to file (always overwrite the same file)
+    filename = os.path.join(bookings_dir, "current_trip.json")
     with open(filename, 'w') as f:
         json.dump(booking_data, f, indent=2)
     
-    return f"Trip booked successfully!\nBooking ID: {booking_data['booking_id']}\nTraveler: {traveler_name}\nDestination: {destination}\nDates: {start_date} to {end_date}\nBudget: ${budget}\nBooking saved successfully."
+    return f"Trip booked successfully!\nBooking ID: {booking_data['booking_id']}\nTraveler: {traveler_name}\nDestination: {destination}\nDates: {start_date} to {end_date}\nBudget: ${budget}\nBooking saved to: current_trip.json"
 
 @mcp.tool()
 def book_transportation(booking_id: str, transport_type: str, departure: str, arrival: str, departure_time: str) -> str:
@@ -105,7 +105,7 @@ def book_transportation(booking_id: str, transport_type: str, departure: str, ar
         Transportation booking confirmation details
     """
     transport_data = {
-        "transport_booking_id": f"TRANS_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+        "transport_booking_id": "CURRENT_TRANSPORT",
         "trip_booking_id": booking_id,
         "transport_type": transport_type,
         "departure": departure,
@@ -119,12 +119,12 @@ def book_transportation(booking_id: str, transport_type: str, departure: str, ar
     bookings_dir = os.path.join(os.path.dirname(__file__), "bookings")
     os.makedirs(bookings_dir, exist_ok=True)
     
-    # Save transportation booking to file
-    filename = os.path.join(bookings_dir, f"{transport_data['transport_booking_id']}.json")
+    # Save transportation booking to file (always overwrite the same file)
+    filename = os.path.join(bookings_dir, "current_transport.json")
     with open(filename, 'w') as f:
         json.dump(transport_data, f, indent=2)
     
-    return f"Transportation booked successfully!\nTransport ID: {transport_data['transport_booking_id']}\nType: {transport_type}\nRoute: {departure} → {arrival}\nDeparture: {departure_time}\nLinked to trip: {booking_id}"
+    return f"Transportation booked successfully!\nTransport ID: {transport_data['transport_booking_id']}\nType: {transport_type}\nRoute: {departure} → {arrival}\nDeparture: {departure_time}\nLinked to trip: {booking_id}\nBooking saved to: current_transport.json"
 
 # Run the server
 if __name__ == "__main__":
