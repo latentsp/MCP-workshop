@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from openai import OpenAI
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -12,68 +12,78 @@ load_dotenv("../.env")
 # Initialize OpenAI client
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-async def get_mcp_tools() -> List[Dict[str, Any]]:
+async def get_mcp_tools(session: ClientSession) -> List[Dict[str, Any]]:
     """Get available tools from the MCP server in OpenAI format.
-
+    
+    Args:
+        session: Active MCP ClientSession
+        
     Returns:
         A list of tools in OpenAI format.
     """
-    print("🔧 Connecting to MCP server to discover available tools...")
-    server_params = StdioServerParameters(
-        command="python",
-        args=["travel_server.py"]
-    )
+    print("📋 Fetching available tools from MCP server...")
     
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            print("✅ Connected to MCP server successfully")
-            
-            tools_result = await session.list_tools()
-            tools = [
-                {
-                    "type": "function",
-                    "function": {
-                        "name": tool.name,
-                        "description": tool.description,
-                        "parameters": tool.inputSchema,
-                    },
-                }
-                for tool in tools_result.tools
-            ]
-            print(f"📋 Discovered {len(tools)} tools: {', '.join([t['function']['name'] for t in tools])}")
-            return tools
+    tools_result = await session.list_tools()
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": tool.name,
+                "description": tool.description,
+                "parameters": tool.inputSchema,
+            },
+        }
+        for tool in tools_result.tools
+    ]
+    print(f"📋 Discovered {len(tools)} tools: {', '.join([t['function']['name'] for t in tools])}")
+    return tools
 
-async def call_mcp_tool(tool_name: str, arguments: dict) -> str:
-    """Call an MCP tool with the given arguments."""
-    print(f"🛠️  Executing tool: {tool_name} with arguments: {arguments}")
-    server_params = StdioServerParameters(
-        command="python",
-        args=["travel_server.py"]
-    )
+async def call_mcp_tool(session: ClientSession, function_name: str, function_args: Dict[str, Any]) -> str:
+    """Call an MCP tool with the given arguments.
     
-    async with stdio_client(server_params) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            
-            result = await session.call_tool(tool_name, arguments)
-            tool_result = result.content[0].text if result.content else "No result"
-            print(f"✅ Tool {tool_name} completed successfully")
-            return tool_result
+    Args:
+        session: Active MCP ClientSession
+        function_name: Name of the tool to call
+        function_args: Arguments to pass to the tool
+        
+    Returns:
+        The result of the tool call as a string.
+    """
+    result = await session.call_tool(function_name, function_args)
+    
+    # Extract text content from the result
+    if hasattr(result, 'content') and result.content:
+        # Handle list of content objects
+        if isinstance(result.content, list):
+            content_parts = []
+            for content_item in result.content:
+                if hasattr(content_item, 'text'):
+                    content_parts.append(content_item.text)
+                else:
+                    content_parts.append(str(content_item))
+            return '\n'.join(content_parts)
+        # Handle single content object
+        elif hasattr(result.content, 'text'):
+            return result.content.text
+        else:
+            return str(result.content)
+    else:
+        return str(result)
 
-async def process_user_query(user_input: str, conversation_history: List[Dict[str, Any]]) -> Tuple[str, List[Dict[str, Any]]]:
+async def process_user_query(user_input: str, conversation_history: List[Dict[str, Any]], session: ClientSession) -> Tuple[str, List[Dict[str, Any]]]:
     """Process user input with OpenAI and handle any tool calls.
     
     Args:
         user_input: The user's input message
         conversation_history: Previous conversation messages
+        session: Active MCP ClientSession
         
     Returns:
         Tuple of (assistant_response, updated_conversation_history)
     """
     
     # Get available tools dynamically from MCP server
-    tools = await get_mcp_tools()
+    tools = await get_mcp_tools(session)
     
     # Add user input to conversation history
     print("📝 Adding user message to conversation history")
@@ -127,7 +137,7 @@ async def process_user_query(user_input: str, conversation_history: List[Dict[st
             print(f"🔄 Executing tool {i}/{len(message.tool_calls)}: {function_name}")
             
             # Call the MCP tool
-            tool_result = await call_mcp_tool(function_name, function_args)
+            tool_result = await call_mcp_tool(session, function_name, function_args)
             
             # Add tool result to messages
             messages.append({
@@ -166,14 +176,12 @@ async def process_user_query(user_input: str, conversation_history: List[Dict[st
     
     return assistant_response, conversation_history
 
-async def main():
-    """Main chat loop for the travel assistant."""
-    print("🌍 Travel Booking Assistant")
-    print("Ask me anything about travel recommendations, booking trips, or transportation!")
-    print("Type 'quit' to exit.\n")
+async def run_chat_loop(session: ClientSession):
+    """Run the main chat loop with an established MCP session.
     
-    print("🚀 Initializing travel assistant...")
-    
+    Args:
+        session: Active MCP ClientSession
+    """
     # Initialize conversation history with system message
     conversation_history = [
         {
@@ -204,7 +212,7 @@ async def main():
                 
             print(f"\n🔄 Processing your request: '{user_input}'")
             print("-" * 100)
-            response, conversation_history = await process_user_query(user_input, conversation_history)
+            response, conversation_history = await process_user_query(user_input, conversation_history, session)
             print("-" * 100)
             print(f"\nAssistant: {response}")
             print("="*100)
@@ -215,6 +223,32 @@ async def main():
         except Exception as e:
             print(f"❌ Error occurred: {e}")
             print("🔄 Please try again or type 'quit' to exit")
+
+async def main():
+    """Main function that sets up MCP connection and runs the chat loop."""
+    print("🌍 Travel Booking Assistant")
+    print("Ask me anything about travel recommendations, booking trips, or transportation!")
+    print("Type 'quit' to exit.\n")
+    
+    print("🚀 Initializing travel assistant...")
+    print("🔧 Setting up MCP server connection...")
+    
+    # Set up MCP server parameters
+    server_params = StdioServerParameters(
+        command="python",
+        args=["travel_server.py"]
+    )
+    
+    # Use proper context managers for the entire session
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            print("✅ MCP server connection established successfully")
+            
+            # Run the chat loop with the established session
+            await run_chat_loop(session)
+    
+    print("🧹 MCP server connection closed")
 
 if __name__ == "__main__":
     asyncio.run(main()) 
