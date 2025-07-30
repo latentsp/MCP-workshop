@@ -16,6 +16,5 @@ You need to create two files: `client.py` and `server.py`.
 
 1. Start the server.
 2. List all available tools.
-3. If the weather tool exists, call it and print the result.
+3. build the weather tool, call it and print the result.
    - You can assume you know the schema for the weather tool - https://gofastmcp.com/servers/tools
-   - If you assume this then the list_tools call is just for practice
